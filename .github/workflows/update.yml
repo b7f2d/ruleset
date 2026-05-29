@@ -5,6 +5,10 @@ on:
     - cron: '0 12 * * *'
   workflow_dispatch: 
 
+# 保持环境为最新的 Node.js 24，消除黄色警告
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   convert:
     runs-on: ubuntu-latest
@@ -17,12 +21,10 @@ jobs:
 
     - name: Download and Convert File
       run: |
-        mkdir -p data
-        
         # 1. 下载原始文件
         curl -sSL "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.list" -o temp_raw.list
         
-        # 2. 清空或初始化目标文件
+        # 2. 在根目录下正确初始化目标文件 AI.list
         > AI.list
         
         # 3. 逐行读取并智能转换前缀
@@ -36,22 +38,23 @@ jobs:
           if [[ "$line" =~ ^\+\. ]] || [[ "$line" =~ ^\. ]]; then
             # 如果是 +. 或 . 开头，转换成 DOMAIN-SUFFIX，并去掉开头的符号
             clean_domain=$(echo "$line" | sed -e 's/^\+//g' -e 's/^\.//g')
-            echo "DOMAIN-SUFFIX,${clean_domain}" >> data/ai-shadowrocket.list
+            echo "DOMAIN-SUFFIX,${clean_domain}" >> AI.list
           else
             # 如果是普通域名，转换成 DOMAIN
-            echo "DOMAIN,${line}" >> data/ai-shadowrocket.list
+            echo "DOMAIN,${line}" >> AI.list
           fi
         done < temp_raw.list
         
         rm temp_raw.list
-        echo "转换完成，已成功保留小火箭对应的 DOMAIN/DOMAIN-SUFFIX 前缀"
+        echo "转换完成，已成功在根目录生成 AI.list"
 
     - name: Commit and Push changes
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         
-        git add data/ai-shadowrocket.list
+        # 4. 追踪根目录下的 AI.list 文件
+        git add AI.list
         
         if git diff --staged --quiet; then
           echo "文件内容无变化，无需提交。"
