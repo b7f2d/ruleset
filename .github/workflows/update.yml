@@ -1,4 +1,4 @@
-name: Convert AI List to Shadowrocket
+name: AI List
 
 on:
   schedule:
