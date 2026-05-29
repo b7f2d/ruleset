@@ -2,9 +2,8 @@ name: Convert AI List to Shadowrocket
 
 on:
   schedule:
-    # 每天北京时间 12:00 运行 (UTC 04:00)
     - cron: '0 4 * * *'
-  workflow_dispatch: # 允许手动点击运行
+  workflow_dispatch: 
 
 jobs:
   convert:
@@ -13,43 +12,34 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        # 显式使用当前分支的 Token，提高权限稳定性
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download and Convert File
       run: |
         mkdir -p data
         
-        # 下载原始文件
+        # 1. 下载原始文件
         curl -sSL "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.list" -o temp_raw.list
         
-        # 初始化目标文件，写入小火箭配置头部标识（可选，更规范）
-        echo "# AI Rules for Shadowrocket" > data/ai-shadowrocket.list
-        echo "# Generated on $(date)" >> data/ai-shadowrocket.list
-        
-        # 开始转换
-        while IFS= read -r line || [ -n "$line" ]; do
-          # 忽略空行和注释
-          [[ -z "$line" || "$line" =~ ^# ]] && continue
-          
-          # 去除开头的 + 或 .
-          clean_line=$(echo "$line" | sed -e 's/^\+//g' -e 's/^\.//g')
-          
-          # 判断是纯域名还是需要匹配子域名，小火箭中 DOMAIN-SUFFIX 匹配该域名及其所有子域名
-          echo "DOMAIN-SUFFIX,${clean_line},PROXY" >> data/ai-shadowrocket.list
-        done < temp_raw.list
+        # 2. 转换为小火箭纯域名规则集 (去掉了 + 和 . 以及后面的 PROXY)
+        sed -e 's/^\+//g' -e 's/^\.//g' temp_raw.list | awk 'NF' > data/ai-ruleset.list
         
         rm temp_raw.list
-        echo "标准规则转换完成"
+        echo "纯域名转换完成"
 
     - name: Commit and Push changes
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         
-        git add data/
+        git add data/ai-ruleset.list
         
-        if ! git diff --staged --quiet; then
-          git commit -m "自动转换更新: $(date +'%Y-%m-%d %H:%M:%S')"
-          git push
+        # 检查是否有内容变化，防止没有更新时引发 git 128 报错
+        if git diff --staged --quiet; then
+          echo "文件内容无变化，无需提交。"
         else
-          echo "文件无变动，跳过提交"
+          git commit -m "自动更新域名列表: $(date +'%Y-%m-%d %H:%M:%S')"
+          git push origin HEAD:${{ github.ref }}
         fi
