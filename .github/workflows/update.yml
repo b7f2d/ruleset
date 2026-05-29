@@ -2,7 +2,7 @@ name: Convert AI List to Shadowrocket
 
 on:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 12 * * *'
   workflow_dispatch: 
 
 jobs:
@@ -13,7 +13,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        # 显式使用当前分支的 Token，提高权限稳定性
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download and Convert File
@@ -23,20 +22,37 @@ jobs:
         # 1. 下载原始文件
         curl -sSL "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.list" -o temp_raw.list
         
-        # 2. 转换为小火箭纯域名规则集 (去掉了 + 和 . 以及后面的 PROXY)
-        sed -e 's/^\+//g' -e 's/^\.//g' temp_raw.list | awk 'NF' > data/ai-ruleset.list
+        # 2. 清空或初始化目标文件
+        > data/ai-shadowrocket.list
+        
+        # 3. 逐行读取并智能转换前缀
+        while IFS= read -r line || [ -n "$line" ]; do
+          # 忽略空行和注释行
+          [[ -z "$line" || "$line" =~ ^# ]] && continue
+          
+          # 去除行尾的换行符或空格
+          line=$(echo "$line" | xargs)
+          
+          if [[ "$line" =~ ^\+\. ]] || [[ "$line" =~ ^\. ]]; then
+            # 如果是 +. 或 . 开头，转换成 DOMAIN-SUFFIX，并去掉开头的符号
+            clean_domain=$(echo "$line" | sed -e 's/^\+//g' -e 's/^\.//g')
+            echo "DOMAIN-SUFFIX,${clean_domain}" >> data/ai-shadowrocket.list
+          else
+            # 如果是普通域名，转换成 DOMAIN
+            echo "DOMAIN,${line}" >> data/ai-shadowrocket.list
+          fi
+        done < temp_raw.list
         
         rm temp_raw.list
-        echo "纯域名转换完成"
+        echo "转换完成，已成功保留小火箭对应的 DOMAIN/DOMAIN-SUFFIX 前缀"
 
     - name: Commit and Push changes
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         
-        git add data/ai-ruleset.list
+        git add data/ai-shadowrocket.list
         
-        # 检查是否有内容变化，防止没有更新时引发 git 128 报错
         if git diff --staged --quiet; then
           echo "文件内容无变化，无需提交。"
         else
