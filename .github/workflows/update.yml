@@ -2,9 +2,7 @@ name: Update AI Rules
 
 on:
 workflow_dispatch:
-
 schedule:
-# UTC 04:00 = 中国/日本时间 12:00
 - cron: "0 4 * * *"
 
 jobs:
@@ -21,20 +19,18 @@ steps:
     with:
       python-version: "3.12"
 
-  - name: Download Latest Rules
+  - name: Download Rules
     run: |
-      curl -L \
-      https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-%21cn.list \
-      -o category-ai-\!cn.list
+      curl -L "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-%21cn.list" -o source.list
 
   - name: Convert
     run: |
       python3 convert.py
 
-  - name: Commit
+  - name: Commit Changes
     run: |
-      git config user.name github-actions
-      git config user.email github-actions@github.com
+      git config user.name "github-actions"
+      git config user.email "github-actions@github.com"
 
       git add .
 
