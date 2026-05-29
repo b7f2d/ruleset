@@ -1,40 +1,55 @@
-name: Update AI Rules
+name: Convert AI List to Shadowrocket
 
 on:
-workflow_dispatch:
-schedule:
-- cron: "0 4 * * *"
+  schedule:
+    # 每天北京时间 12:00 运行 (UTC 04:00)
+    - cron: '0 4 * * *'
+  workflow_dispatch: # 允许手动点击运行
 
 jobs:
-update:
-runs-on: ubuntu-latest
+  convert:
+    runs-on: ubuntu-latest
 
-```
-steps:
-  - name: Checkout
-    uses: actions/checkout@v4
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-  - name: Setup Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: "3.12"
+    - name: Download and Convert File
+      run: |
+        mkdir -p data
+        
+        # 下载原始文件
+        curl -sSL "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.list" -o temp_raw.list
+        
+        # 初始化目标文件，写入小火箭配置头部标识（可选，更规范）
+        echo "# AI Rules for Shadowrocket" > data/ai-shadowrocket.list
+        echo "# Generated on $(date)" >> data/ai-shadowrocket.list
+        
+        # 开始转换
+        while IFS= read -r line || [ -n "$line" ]; do
+          # 忽略空行和注释
+          [[ -z "$line" || "$line" =~ ^# ]] && continue
+          
+          # 去除开头的 + 或 .
+          clean_line=$(echo "$line" | sed -e 's/^\+//g' -e 's/^\.//g')
+          
+          # 判断是纯域名还是需要匹配子域名，小火箭中 DOMAIN-SUFFIX 匹配该域名及其所有子域名
+          echo "DOMAIN-SUFFIX,${clean_line},PROXY" >> data/ai-shadowrocket.list
+        done < temp_raw.list
+        
+        rm temp_raw.list
+        echo "标准规则转换完成"
 
-  - name: Download Rules
-    run: |
-      curl -L "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-%21cn.list" -o source.list
-
-  - name: Convert
-    run: |
-      python3 convert.py
-
-  - name: Commit Changes
-    run: |
-      git config user.name "github-actions"
-      git config user.email "github-actions@github.com"
-
-      git add .
-
-      git commit -m "auto update" || exit 0
-
-      git push
-```
+    - name: Commit and Push changes
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        
+        git add data/
+        
+        if ! git diff --staged --quiet; then
+          git commit -m "自动转换更新: $(date +'%Y-%m-%d %H:%M:%S')"
+          git push
+        else
+          echo "文件无变动，跳过提交"
+        fi
