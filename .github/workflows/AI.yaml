@@ -1,4 +1,4 @@
-name: AI List
+name: AI
 
 on:
   schedule:
